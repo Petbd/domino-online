@@ -7,4 +7,3 @@ obj/
 *.dll
 *.exe
 publish/
-wwwroot/

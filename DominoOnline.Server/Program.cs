@@ -2,6 +2,7 @@ using DominoOnline.Server.Hubs;
 using DominoOnline.Server.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Environment.WebRootPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
 
 // Только для Render.com (переменная окружения PORT). 
 // Локально используем порт из launchSettings.json (5000)
@@ -27,9 +28,9 @@ builder.Services.AddSignalR();
 var app = builder.Build();
 
 app.UseCors("AllowAll");
-
 app.UseDefaultFiles();
 app.UseStaticFiles();
+app.UseRouting();
 
 app.UseRouting();
 
