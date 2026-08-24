@@ -27,10 +27,9 @@ builder.Services.AddSignalR();
 var app = builder.Build();
 
 app.UseCors("AllowAll");
-app.UseRouting();
-
 app.UseDefaultFiles();
 app.UseStaticFiles();
+app.UseRouting();
 
 app.MapHub<GameHub>("/gamehub");
 app.MapGet("/health", () => "OK");
