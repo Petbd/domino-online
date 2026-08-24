@@ -17,8 +17,15 @@ RUN dotnet publish DominoOnline.Server/DominoOnline.Server.csproj -c Release -o 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 
+# Копируем сервер
 COPY --from=build /app/publish/server .
-COPY --from=build /app/publish/client/wwwroot ./wwwroot
+
+# Копируем статику Blazor в wwwroot (ВАЖНО: сначала создаём папку)
+RUN mkdir -p /app/wwwroot
+COPY --from=build /app/publish/client/wwwroot/ /app/wwwroot/
+
+# Разрешаем чтение (Render требует)
+RUN chmod -R 755 /app/wwwroot
 
 EXPOSE 8080
 ENV ASPNETCORE_URLS=http://+:8080
