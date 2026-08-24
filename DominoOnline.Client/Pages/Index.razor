@@ -84,7 +84,7 @@
         try
         {
             var hubUrl = GetHubUrl();
-            await HubService.ConnectAsync(HubUrl.GetHubUrl());
+            await HubService.ConnectAsync(GetHubUrl());
             isConnected = true;
         }
         catch (Exception ex)
