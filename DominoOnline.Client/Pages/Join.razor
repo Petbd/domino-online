@@ -1,0 +1,97 @@
+﻿@page "/join/{GameId}"
+@inject GameHubService HubService
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<div class="container">
+    <h1>🎲 Присоединиться к игре</h1>
+
+    @if (connectionError != null)
+    {
+        <div class="error">
+            <p>@connectionError</p>
+            <a href="/">← На главную</a>
+        </div>
+    }
+    else if (joined)
+    {
+        <div class="success">
+            <h2>✅ Вы в игре!</h2>
+            <p>Ожидаем начала игры от администратора...</p>
+        </div>
+    }
+    else if (error != null)
+    {
+        <div class="error">
+            <p>@error</p>
+            <a href="/">← На главную</a>
+        </div>
+    }
+    else
+    {
+        <div class="join-form">
+            <h2>Игра: @GameId</h2>
+            <input @bind="nickname" placeholder="Введите ваш ник" maxlength="20" />
+            <button @onclick="DoJoin" disabled="@string.IsNullOrWhiteSpace(nickname)">
+                Присоединиться
+            </button>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public string GameId { get; set; } = string.Empty;
+
+    private string nickname = "";
+    private bool joined = false;
+    private string? error;
+    private string? connectionError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        HubService.OnGameStarted += OnGameStarted;
+
+        try
+        {
+            var hubUrl = GetHubUrl();
+            await HubService.ConnectAsync(hubUrl);
+        }
+        catch (Exception ex)
+        {
+            connectionError = "❌ Не удалось подключиться к серверу. Убедитесь, что сервер запущен.";
+            Console.WriteLine(ex.Message);
+        }
+    }
+
+    private string GetHubUrl()
+    {
+        if (Navigation.BaseUri.Contains("localhost"))
+            return "http://localhost:5000/gamehub";
+        return Navigation.BaseUri.TrimEnd('/') + "/gamehub";
+    }
+
+    private async Task DoJoin()
+    {
+        var result = await HubService.JoinGameAsync(GameId, nickname);
+        if (result)
+        {
+            joined = true;
+            Navigation.NavigateTo($"/game/{GameId}");
+        }
+        else
+        {
+            error = "Не удалось присоединиться. Игра не найдена или уже заполнена.";
+        }
+    }
+
+    private void OnGameStarted(string turnId)
+    {
+        Navigation.NavigateTo($"/game/{GameId}");
+    }
+
+    public void Dispose()
+    {
+        HubService.OnGameStarted -= OnGameStarted;
+    }
+}

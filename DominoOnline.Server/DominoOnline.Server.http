@@ -1,0 +1,6 @@
+@DominoOnline.Server_HostAddress = http://localhost:5072
+
+GET {{DominoOnline.Server_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

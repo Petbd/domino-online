@@ -1,0 +1,440 @@
+﻿@page "/game/{GameId}"
+@inject GameHubService HubService
+@inject NavigationManager Navigation
+@using DominoOnline.Shared.Models
+@implements IDisposable
+
+<div class="container">
+    <h1>🎲 Игра Домино</h1>
+
+    @if (myHand == null)
+    {
+        @if (players.Count > 0)
+        {
+            <div class="loading">
+                <h3>Игроки в лобби:</h3>
+                @foreach (var p in players)
+                {
+                    <p>@(p.Nickname) @(p.ConnectionId == HubService.MyConnectionId ? "(Вы)" : "")</p>
+                }
+                <p>⏳ Ожидание начала игры администратором...</p>
+            </div>
+        }
+        else
+        {
+            <div class="loading">Подключение к игре...</div>
+        }
+    }
+    else
+    {
+        <div class="game-board">
+            <div style="text-align:center; margin-bottom:10px;">
+                <span style="font-size:18px; font-weight:bold; color:#007bff;">Раунд: @currentRound</span>
+                <span style="margin:0 15px;">|</span>
+                <span style="font-size:18px; font-weight:bold; color:#28a745;">Игра до: @targetScore очков</span>
+            </div>
+            <div class="players-info">
+                @foreach (var p in players)
+                {
+                    <div class="player-badge @(p.IsTurn ? "active" : "")">
+                        @p.Nickname
+                        <span style="margin-left:8px; color:#666;">(@p.HandCount костей)</span>
+                        <span style="margin-left:8px; color:#007bff; font-weight:bold;">@p.Score очк.</span>
+                        @if (p.ConnectionId == HubService.MyConnectionId)
+                        {
+                            <span style="margin-left:4px;">(Вы)</span>
+                        }
+                    </div>
+                }
+            </div>
+
+            <div class="board">
+                <h3>Стол @(leftEnd >= 0 ? $"({leftEnd} ... {rightEnd})" : "")</h3>
+                <div class="tiles-row">
+                    @foreach (var tile in boardTiles)
+                    {
+                        <div class="tile-horizontal @(tile.IsDouble ? "double-h" : "")">
+                            <span>@tile.Left</span>
+                            <div class="h-divider"></div>
+                            <span>@tile.Right</span>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <div class="actions">
+                @if (isMyTurn)
+                {
+                    <span class="turn-indicator">🔥 ВАШ ХОД!</span>
+
+                    @if (selectedTile != null)
+                    {
+                        <div class="place-buttons">
+                            <button @onclick="() => PlayTile(true)">⬅️ Влево</button>
+                            <button @onclick="() => PlayTile(false)">Вправо ➡️</button>
+                            <button @onclick="() => selectedTile = null">Отмена</button>
+                        </div>
+                    }
+
+                    @if (boneyardCount > 0)
+                    {
+                        <button @onclick="DrawTile" class="boneyard-btn">🎴 Взять с базара (@boneyardCount)</button>
+                    }
+
+                    <button @onclick="SkipTurn" class="skip-btn">⏭️ Пропустить ход</button>
+                }
+                else
+                {
+                    <span class="turn-indicator">⏳ Ход противника...</span>
+                }
+            </div>
+
+            <div class="my-hand">
+                <h3>Ваши кости:</h3>
+                <div class="tiles-row">
+                    @foreach (var tile in myHand)
+                    {
+                        <button class="tile-btn @(isMyTurn && selectedTile == tile ? "selected" : "") @(isMyTurn ? "active" : "disabled")"
+                                @onclick="() => SelectTile(tile)"
+                                disabled="@(!isMyTurn)">
+                            <span>@tile.Left</span>
+                            <div class="divider"></div>
+                            <span>@tile.Right</span>
+                        </button>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+    @if (showRoundModal)
+    {
+        <div class="modal">
+            <div class="modal-content">
+                <h2>🏆 Раунд окончен!</h2>
+                <p>Победитель раунда: <strong>@roundWinnerName</strong></p>
+                <p>Общий штраф проигравших: <strong>@pointsAwarded</strong></p>
+                <p>Цель: не набрать <strong>@targetScore</strong> штрафных очков</p>
+
+                @if (players.FirstOrDefault(p => p.ConnectionId == HubService.MyConnectionId)?.IsAdmin == true)
+                {
+                    <button class="start-btn" @onclick="NextRound">▶ Следующий раунд</button>
+                }
+                else
+                {
+                    <p class="waiting">Ожидание админа...</p>
+                }
+            </div>
+        </div>
+    }
+
+    @if (showMatchModal)
+    {
+        <div class="modal">
+            <div class="modal-content">
+                <h2 style="color:#dc3545;">🎉 Матч окончен!</h2>
+                <p>Победитель: <strong>@matchWinnerName</strong></p>
+                <p>Финальный счёт: <strong>@matchFinalScore</strong></p>
+
+                @if (players.FirstOrDefault(p => p.ConnectionId == HubService.MyConnectionId)?.IsAdmin == true)
+                {
+                    <button class="start-btn" @onclick="StartRematch" style="background:#007bff; margin:5px;">🔄 Реванш</button>
+                }
+                <button @onclick='() => Navigation.NavigateTo("/")' style="margin:5px;">🏠 На главную</button>
+            </div>
+        </div>
+    }
+
+    <div class="chat-panel" style="margin-top:20px; border:2px solid #dee2e6; border-radius:12px; overflow:hidden;">
+    <div style="background:#007bff; color:white; padding:10px; cursor:pointer; font-weight:bold;" @onclick="ToggleChat">
+        💬 Чат @(showChat ? "▼" : "▶") (@chatMessages.Count)
+    </div>
+    
+    @if (showChat)
+    {
+        <div style="height:200px; overflow-y:auto; padding:10px; background:#f8f9fa;">
+            @if (chatMessages.Count == 0)
+            {
+                <p style="color:#999; font-style:italic; text-align:center;">Напишите первое сообщение...</p>
+            }
+            else
+            {
+                @foreach (var msg in chatMessages)
+                {
+                    <div style="margin-bottom:8px;">
+                        <span style="color:#666; font-size:12px;">@msg.time.ToLocalTime().ToString("HH:mm")</span>
+                        <strong style="color:#007bff;">@msg.sender:</strong>
+                        <span>@msg.text</span>
+                    </div>
+                }
+            }
+        </div>
+        
+        <div style="display:flex; padding:10px; background:white; border-top:1px solid #dee2e6;">
+            <input @bind="chatInput" @bind:event="oninput" 
+                       @onkeydown="HandleChatKeyDown"
+                   placeholder="Написать сообщение..." 
+                   maxlength="200"
+                   style="flex:1; margin:0; border:1px solid #ddd;" />
+            <button @onclick="SendChat" style="margin-left:10px; padding:10px 20px;">➤</button>
+        </div>
+    }
+</div>
+
+</div>
+
+@if (gameOver)
+{
+    <div class="modal">
+        <div class="modal-content">
+            <h2>🏆 Игра окончена!</h2>
+            <p>Победитель: <strong>@winnerName</strong></p>
+            <button @onclick="GoHome">На главную</button>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public string GameId { get; set; } = string.Empty;
+
+    [Inject] private HubUrlProvider HubUrl { get; set; } = default!;
+    private List<DominoTile>? myHand = null;
+    private List<DominoTile> boardTiles = new();
+    private List<PlayerDto> players = new();
+    private bool isMyTurn = false;
+    private DominoTile? selectedTile;
+    private int boneyardCount = 0;
+    private bool gameOver = false;
+    private string winnerName = "";
+    private int leftEnd = -1;
+    private int rightEnd = -1;
+    private bool showRoundModal = false;
+    private bool showMatchModal = false;
+    private string roundWinnerName = "";
+    private int pointsAwarded = 0;
+    private int winnerTotalScore = 0;
+    private int targetScore = 101;
+    private int currentRound = 1;
+    private string matchWinnerName = "";
+    private int matchFinalScore = 0;
+    private string chatInput = "";
+    private List<(string sender, string text, DateTime time)> chatMessages = new();
+    private bool showChat = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        HubService.OnHandDealt += OnHandDealt;
+        HubService.OnGameStarted += OnGameStarted;
+        HubService.OnMoveMade += OnMoveMade;
+        HubService.OnTileDrawn += OnTileDrawn;
+        HubService.OnStateUpdated += OnStateUpdated;
+        HubService.OnTurnChanged += OnTurnChanged;
+        HubService.OnGameOver += OnGameOver;
+        HubService.OnError += OnError;
+        HubService.OnBoardSynced += OnBoardSynced;
+        HubService.OnRoundOver += (winnerName, winnerId, points, totalScore, tScore) =>
+        {
+            InvokeAsync(() =>
+            {
+                roundWinnerName = winnerName;
+                pointsAwarded = points;
+                winnerTotalScore = totalScore;
+                targetScore = tScore;
+                showRoundModal = true;
+                StateHasChanged();
+            });
+        };
+
+        HubService.OnMatchOver += (winnerName, winnerId, finalScore) =>
+        {
+            InvokeAsync(() =>
+            {
+                matchWinnerName = winnerName;
+                matchFinalScore = finalScore;
+                showMatchModal = true;
+                StateHasChanged();
+            });
+        };
+
+        HubService.OnRoundStarted += (round) =>
+        {
+            InvokeAsync(() =>
+            {
+                currentRound = round;
+                showRoundModal = false;
+                // Гарантированно чистим локальную доску
+                boardTiles = new List<DominoTile>();
+                leftEnd = -1;
+                rightEnd = -1;
+                StateHasChanged();
+            });
+        };
+
+        HubService.OnRematchCreated += async (newGameId) =>
+        {
+            await InvokeAsync(() =>
+            {
+                Navigation.NavigateTo($"/game/{newGameId}");
+            });
+        };
+
+        HubService.OnChatMessageReceived += (sender, text, time) =>
+        {
+            InvokeAsync(() =>
+            {
+                chatMessages.Add((sender, text, time));
+                if (chatMessages.Count > 50) chatMessages.RemoveAt(0);
+                StateHasChanged();
+            });
+        };
+
+        try
+        {
+            var hubUrl = GetHubUrl();
+            await HubService.ConnectAsync(hubUrl);
+            await HubService.SyncStateAsync(GameId);
+            var history = await HubService.GetChatHistoryAsync(GameId);
+            chatMessages = history.Select(m => (m.SenderNickname, m.Text, m.SentAt)).ToList();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
+        }
+    }
+
+    private async Task HandleChatKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await SendChat();
+    }
+
+    private async Task SendChat()
+    {
+        if (string.IsNullOrWhiteSpace(chatInput)) return;
+        await HubService.SendChatMessageAsync(GameId, chatInput);
+        chatInput = "";
+    }
+
+    private void ToggleChat() => showChat = !showChat;
+
+    private async Task StartRematch()
+    {
+        if (!string.IsNullOrEmpty(GameId))
+            await HubService.RematchAsync(GameId);
+    }
+
+    private async Task NextRound()
+    {
+        if (!string.IsNullOrEmpty(GameId))
+            await HubService.StartNewRoundAsync(GameId);
+    }
+
+    private string GetHubUrl()
+    {
+        if (Navigation.BaseUri.Contains("localhost"))
+            return "http://localhost:5000/gamehub";
+        return Navigation.BaseUri.TrimEnd('/') + "/gamehub";
+    }
+
+    private void OnHandDealt(List<DominoTile> hand)
+    {
+        myHand = hand;
+        StateHasChanged();
+    }
+
+    private void OnGameStarted(string turnId)
+    {
+        isMyTurn = turnId == HubService.MyConnectionId;
+        StateHasChanged();
+    }
+
+    private void OnMoveMade(DominoTile placedTile, bool left, string nextTurnId, int lEnd, int rEnd)
+    {
+        if (left)
+            boardTiles.Insert(0, placedTile);
+        else
+            boardTiles.Add(placedTile);
+
+        leftEnd = lEnd;
+        rightEnd = rEnd;
+
+        // Удаляем из руки ТОЛЬКО если это был наш ход (selectedTile содержит исходную кость)
+        if (selectedTile != null)
+        {
+            var toRemove = myHand?.FirstOrDefault(t => t.Left == selectedTile.Left && t.Right == selectedTile.Right);
+            if (toRemove != null) myHand?.Remove(toRemove);
+            selectedTile = null;
+        }
+
+        isMyTurn = nextTurnId == HubService.MyConnectionId;
+        StateHasChanged();
+    }
+
+    private void OnTileDrawn(DominoTile tile, bool canPlay)
+    {
+        myHand ??= new List<DominoTile>();
+        myHand.Add(tile);
+        StateHasChanged();
+    }
+
+    private void OnStateUpdated(List<PlayerDto> playersList, int boneyard)
+    {
+        players = playersList;
+        boneyardCount = boneyard;
+        var me = playersList.FirstOrDefault(p => p.ConnectionId == HubService.MyConnectionId);
+        isMyTurn = me?.IsTurn ?? false;
+        StateHasChanged();
+    }
+
+    private void OnTurnChanged(string nextTurnId)
+    {
+        isMyTurn = nextTurnId == HubService.MyConnectionId;
+        StateHasChanged();
+    }
+
+    private void OnGameOver(string winner, string winnerId)
+    {
+        gameOver = true;
+        winnerName = winner;
+        StateHasChanged();
+    }
+
+    private void OnBoardSynced(List<DominoTile> board, int lEnd, int rEnd)
+    {
+        boardTiles = board;
+        leftEnd = lEnd;
+        rightEnd = rEnd;
+        StateHasChanged();
+    }
+
+    private void OnError(string msg) => Console.WriteLine($"Error: {msg}");
+
+    private void SelectTile(DominoTile tile)
+    {
+        if (!isMyTurn) return;
+        selectedTile = tile;
+    }
+
+    private async Task PlayTile(bool left)
+    {
+        if (selectedTile == null || myHand == null) return;
+        await HubService.MakeMoveAsync(GameId, selectedTile, left);
+    }
+
+    private async Task DrawTile() => await HubService.DrawFromBoneyardAsync(GameId);
+    private async Task SkipTurn() => await HubService.SkipTurnAsync(GameId);
+    private void GoHome() => Navigation.NavigateTo("/");
+
+    public void Dispose()
+    {
+        HubService.OnHandDealt -= OnHandDealt;
+        HubService.OnGameStarted -= OnGameStarted;
+        HubService.OnMoveMade -= OnMoveMade;
+        HubService.OnTileDrawn -= OnTileDrawn;
+        HubService.OnStateUpdated -= OnStateUpdated;
+        HubService.OnTurnChanged -= OnTurnChanged;
+        HubService.OnGameOver -= OnGameOver;
+        HubService.OnError -= OnError;
+        HubService.OnBoardSynced -= OnBoardSynced;
+    }
+}

@@ -1,0 +1,56 @@
+﻿@page "/history"
+@inject NavigationManager Navigation
+@inject GameHubService HubService
+@using DominoOnline.Shared.Models
+
+<div class="container">
+    <h2>📜 История матчей</h2>
+
+    @if (history == null)
+    {
+        <div class="loading">Загрузка...</div>
+    }
+    else if (history.Count == 0)
+    {
+        <p>История пуста. Сыграйте первый матч!</p>
+    }
+    else
+    {
+        <table style="width:100%; border-collapse:collapse; margin-top:20px;">
+            <thead>
+                <tr style="background:#007bff; color:white;">
+                    <th style="padding:10px; border:1px solid #ddd;">Дата</th>
+                    <th style="padding:10px; border:1px solid #ddd;">Победитель</th>
+                    <th style="padding:10px; border:1px solid #ddd;">Цель</th>
+                    <th style="padding:10px; border:1px solid #ddd;">Игроки (штрафные очки)</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var match in history)
+                {
+                    <tr style="background:#f8f9fa;">
+                        <td style="padding:10px; border:1px solid #ddd;">@match.FinishedAt.ToLocalTime().ToString("g")</td>
+                        <td style="padding:10px; border:1px solid #ddd; font-weight:bold; color:#28a745;">@match.WinnerName</td>
+                        <td style="padding:10px; border:1px solid #ddd;">@match.TargetScore</td>
+                        <td style="padding:10px; border:1px solid #ddd;">
+                            @string.Join(" | ", match.PlayerScores.Select(p => $"{p.Nickname}: {p.Score}"))
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+
+    <button @onclick='() => Navigation.NavigateTo("/")' style="margin-top:20px;">🏠 На главную</button>
+</div>
+
+@code {
+    [Inject] private HubUrlProvider HubUrl { get; set; } = default!;
+    private List<MatchResult>? history;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await HubService.ConnectAsync(HubUrl.GetHubUrl());
+        history = await HubService.GetHistoryAsync();
+    }
+}

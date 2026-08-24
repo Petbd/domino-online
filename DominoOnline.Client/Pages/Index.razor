@@ -1,0 +1,150 @@
+﻿@page "/"
+@inject GameHubService HubService
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@implements IDisposable
+
+<div class="container">
+    <h1>🎲 Домино Онлайн</h1>
+
+    @if (!isConnected)
+    {
+        @if (connectionError != null)
+        {
+            <div class="error">@connectionError</div>
+        }
+        else
+        {
+            <div class="loading">Подключение к серверу...</div>
+        }
+    }
+    else if (string.IsNullOrEmpty(gameId))
+    {
+
+        <div style="margin:10px;">
+            <label style="font-weight:bold;">Играть до:</label>
+            <select @bind="targetScore" style="padding:10px; font-size:16px; border-radius:8px; margin-left:10px;">
+                <option value="101">101 очко</option>
+                <option value="501">501 очко</option>
+            </select>
+        </div>
+
+        <div class="create-section">
+            <h2>Создать новую игру</h2>
+            <input @bind="nickname" placeholder="Введите ваш ник" maxlength="20" />
+            <button @onclick="CreateGame" disabled="@string.IsNullOrWhiteSpace(nickname)">
+                Создать игру
+            </button>
+        </div>
+
+        <div style="margin-top:20px;">
+            <a href="/history" style="color:#007bff; font-size:16px;">📜 История матчей</a>
+        </div>
+
+    }
+    else
+    {
+        <div class="lobby">
+            <h2>Игра создана!</h2>
+            <p>Отправьте эту ссылку другу:</p>
+            <div class="link-box">
+                <input readonly value="@joinLink" />
+                <button @onclick="CopyLink">📋 Копировать</button>
+            </div>
+            <p>ID игры: <strong>@gameId</strong></p>
+
+            @if (playerJoined)
+            {
+                <button class="start-btn" @onclick="StartGame">🚀 Начать игру!</button>
+            }
+            else
+            {
+                <p class="waiting">⏳ Ожидаем второго игрока...</p>
+            }
+        </div>
+
+    }
+</div>
+
+@code {
+    [Inject] private HubUrlProvider HubUrl { get; set; } = default!;
+    private string nickname = "";
+    private string? gameId;
+    private string? joinLink;
+    private bool isConnected = false;
+    private bool playerJoined = false;
+    private string? connectionError;
+    private int targetScore = 101;
+
+    protected override async Task OnInitializedAsync()
+    {
+        HubService.OnGameCreated += OnGameCreated;
+        HubService.OnPlayerJoined += OnPlayerJoined;
+        HubService.OnGameReady += OnGameReady;
+
+        try
+        {
+            var hubUrl = GetHubUrl();
+            await HubService.ConnectAsync(HubUrl.GetHubUrl());
+            isConnected = true;
+        }
+        catch (Exception ex)
+        {
+            connectionError = "❌ Не удалось подключиться к серверу. Убедитесь, что сервер запущен.";
+            Console.WriteLine(ex.Message);
+        }
+    }
+
+    private string GetHubUrl()
+    {
+        if (Navigation.BaseUri.Contains("localhost"))
+            return "http://localhost:5000/gamehub";
+        return Navigation.BaseUri.TrimEnd('/') + "/gamehub";
+    }
+
+    private async Task CreateGame()
+    {
+        await HubService.CreateGameAsync(nickname, targetScore);
+    }
+
+    private void OnGameCreated(string id)
+    {
+        gameId = id;
+        joinLink = Navigation.BaseUri + "join/" + id;
+        StateHasChanged();
+    }
+
+    private void OnPlayerJoined(string nick)
+    {
+        playerJoined = true;
+        StateHasChanged();
+    }
+
+    private void OnGameReady()
+    {
+        playerJoined = true;
+        StateHasChanged();
+    }
+
+    private async Task StartGame()
+    {
+        if (gameId != null)
+        {
+            await HubService.StartGameAsync(gameId);
+            Navigation.NavigateTo($"/game/{gameId}");
+        }
+    }
+
+    private async Task CopyLink()
+    {
+        if (joinLink != null)
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", joinLink);
+    }
+
+    public void Dispose()
+    {
+        HubService.OnGameCreated -= OnGameCreated;
+        HubService.OnPlayerJoined -= OnPlayerJoined;
+        HubService.OnGameReady -= OnGameReady;
+    }
+}

@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/Элементы решения/">
+    <File Path=".gitignore" />
+  </Folder>
+  <Project Path="DominoOnline.Client/DominoOnline.Client.csproj" />
+  <Project Path="DominoOnline.Server/DominoOnline.Server.csproj" />
+  <Project Path="DominoOnline.Shared/DominoOnline.Shared.csproj" />
+</Solution>
