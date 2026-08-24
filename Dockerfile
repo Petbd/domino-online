@@ -1,5 +1,5 @@
 # Этап 1: Сборка
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 COPY DominoOnline.slnx .
@@ -14,7 +14,7 @@ RUN dotnet publish DominoOnline.Client/DominoOnline.Client.csproj -c Release -o 
 RUN dotnet publish DominoOnline.Server/DominoOnline.Server.csproj -c Release -o /app/publish/server
 
 # Этап 2: Runtime
-FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 
 COPY --from=build /app/publish/server .
