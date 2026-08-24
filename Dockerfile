@@ -20,10 +20,10 @@ WORKDIR /app
 # Копируем сервер
 COPY --from=build /app/publish/server .
 
-# 🔥 КОПИРУЕМ ВСЁ из publish клиента (там есть index.html, css, _framework)
-COPY --from=build /app/publish/client/ ./wwwroot/
+# 🔥 КОПИРУЕМ СОДЕРЖИМОЕ wwwroot клиента (со слешем!)
+COPY --from=build /app/publish/client/wwwroot/ ./wwwroot/
 
-# Проверим, что попало (увидим в логах Render)
+# Проверим — должны быть index.html, css, _framework
 RUN ls -la /app/wwwroot/
 
 EXPOSE 8080
