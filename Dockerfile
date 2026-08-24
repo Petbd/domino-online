@@ -13,15 +13,18 @@ RUN dotnet restore DominoOnline.Client/DominoOnline.Client.csproj
 RUN dotnet publish DominoOnline.Client/DominoOnline.Client.csproj -c Release -o /app/publish/client
 RUN dotnet publish DominoOnline.Server/DominoOnline.Server.csproj -c Release -o /app/publish/server
 
-# КОПИРУЕМ СТАТИКУ КЛИЕНТА В ПАПКУ СЕРВЕРА (чтобы всё было вместе)
-RUN mkdir -p /app/publish/server/wwwroot && cp -r /app/publish/client/wwwroot/* /app/publish/server/wwwroot/
-
 # Этап 2: Runtime
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 
-# Копируем сервер ВМЕСТЕ со статикой внутри wwwroot
+# Копируем сервер
 COPY --from=build /app/publish/server .
+
+# Копируем статику клиента явно
+COPY --from=build /app/publish/client/wwwroot ./wwwroot
+
+# Проверим, что файлы на месте (увидим в логах сборки Render)
+RUN ls -la /app/wwwroot/
 
 EXPOSE 8080
 ENV ASPNETCORE_URLS=http://+:8080
