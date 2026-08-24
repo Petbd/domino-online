@@ -2,7 +2,7 @@
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 WORKDIR /src
 
-COPY DominoOnline.sln .
+COPY DominoOnline.slnx .
 COPY DominoOnline.Shared/ DominoOnline.Shared/
 COPY DominoOnline.Server/ DominoOnline.Server/
 COPY DominoOnline.Client/ DominoOnline.Client/
